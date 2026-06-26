@@ -13,10 +13,16 @@ export interface NoGpsImage {
   optimizedBlob: Blob
 }
 
+export interface ProcessingState {
+  current: number
+  total: number
+}
+
 export interface AppState {
   pins: Pin[]
   noGpsImages: NoGpsImage[]
   selectedNoGpsId: string | null
+  processing: ProcessingState | null
   stats: { pinCount: number; noGpsCount: number }
 }
 
@@ -28,6 +34,7 @@ export interface AppActions {
   removeNoGpsImage: (id: string) => void
   clearNoGpsImages: () => void
   setSelectedNoGpsId: (id: string | null) => void
+  setProcessing: (p: ProcessingState | null) => void
   clearAll: () => void
 }
 
