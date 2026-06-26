@@ -1,5 +1,6 @@
 import { MAX_IMAGE_DIMENSION, THUMBNAIL_DIMENSION, JPEG_QUALITY } from './lib.ts'
 import type { Pin, NoGpsImage } from './lib.ts'
+import { gps } from 'https://esm.sh/exifr@7'
 
 function generateId(): string {
   return crypto.randomUUID()
@@ -71,14 +72,13 @@ export async function extractGps(
   file: File
 ): Promise<{ latitude: number; longitude: number } | null> {
   try {
-    const exifr = await import('https://esm.sh/exifr@7')
-    const gps = await exifr.gps(file)
+    const result = await gps(file)
     if (
-      gps &&
-      typeof gps.latitude === 'number' &&
-      typeof gps.longitude === 'number'
+      result &&
+      typeof result.latitude === 'number' &&
+      typeof result.longitude === 'number'
     ) {
-      return { latitude: gps.latitude, longitude: gps.longitude }
+      return { latitude: result.latitude, longitude: result.longitude }
     }
   } catch {}
   return null

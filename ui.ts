@@ -1,12 +1,17 @@
 import { store, subscribeSelector } from './store.ts'
 import { processImage, extractGps } from './images.ts'
+import type { Pin, NoGpsImage } from './lib.ts'
+
+const CONCURRENCY = 5
 
 export function initUI() {
   setupDropzone()
   setupClearButton()
   setupExportButton()
+  subscribeSelector((s) => s.pins, renderPinList)
   subscribeSelector((s) => s.noGpsImages, renderNoGpsList)
   subscribeSelector((s) => s.stats, renderStats)
+  subscribeSelector((s) => s.processing, renderProcessing)
 }
 
 function setupDropzone() {
@@ -43,15 +48,59 @@ function setupDropzone() {
 }
 
 async function handleFiles(files: File[]) {
-  for (const file of files) {
-    const gps = await extractGps(file)
-    const result = await processImage(file, gps)
-    if (result.pin) store.getState().addPins([result.pin])
-    if (result.noGps) store.getState().addNoGpsImages([result.noGps])
+  const total = files.length
+  if (total === 0) return
+  store.getState().setProcessing({ current: 0, total })
+  let completed = 0
+
+  async function worker() {
+    while (queue.length > 0) {
+      const file = queue.shift()!
+      try {
+        const gps = await extractGps(file)
+        const result = await processImage(file, gps)
+        if (result.pin) store.getState().addPins([result.pin])
+        if (result.noGps) store.getState().addNoGpsImages([result.noGps])
+      } catch (err) {
+        console.warn('Failed to process', file.name, err)
+      }
+      completed++
+      store.getState().setProcessing({ current: completed, total })
+    }
   }
+
+  const queue = [...files]
+  const workers = Array.from({ length: Math.min(CONCURRENCY, total) }, worker)
+  await Promise.all(workers)
+  store.getState().setProcessing(null)
 }
 
-function renderNoGpsList(images: any[]) {
+function renderPinList(pins: Pin[]) {
+  const container = document.getElementById('pin-list')!
+  if (pins.length === 0) {
+    container.innerHTML = ''
+    return
+  }
+  container.innerHTML = pins
+    .map(
+      (pin) => `
+      <div class="flex items-center gap-2 px-4 py-1.5 text-sm hover:bg-gray-50">
+        <span class="truncate flex-1">${pin.fileName}</span>
+        <button class="text-red-500 hover:text-red-700 text-xs font-medium delete-pin" data-id="${pin.id}">Delete</button>
+      </div>
+    `
+    )
+    .join('')
+
+  container.querySelectorAll('.delete-pin').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = (btn as HTMLElement).dataset.id!
+      store.getState().removePin(id)
+    })
+  })
+}
+
+function renderNoGpsList(images: NoGpsImage[]) {
   const container = document.getElementById('no-gps-list')!
   if (images.length === 0) {
     container.innerHTML =
@@ -65,7 +114,7 @@ function renderNoGpsList(images: any[]) {
         store.getState().selectedNoGpsId === img.id
           ? 'bg-blue-50 ring-1 ring-blue-400'
           : ''
-      }" data-id="${img.id}">
+      }">
         <span class="text-sm truncate flex-1">${img.fileName}</span>
         <button class="text-xs text-blue-600 hover:text-blue-800 place-btn" data-id="${img.id}">
           Place
@@ -81,7 +130,6 @@ function renderNoGpsList(images: any[]) {
       const id = (btn as HTMLElement).dataset.id!
       const current = store.getState().selectedNoGpsId
       store.getState().setSelectedNoGpsId(current === id ? null : id)
-      renderNoGpsList(store.getState().noGpsImages)
     })
   })
 }
@@ -89,6 +137,16 @@ function renderNoGpsList(images: any[]) {
 function renderStats(stats: { pinCount: number; noGpsCount: number }) {
   const el = document.getElementById('stats')!
   el.textContent = `${stats.pinCount} pin${stats.pinCount !== 1 ? 's' : ''} · ${stats.noGpsCount} without GPS`
+}
+
+function renderProcessing(p: { current: number; total: number } | null) {
+  const el = document.getElementById('processing')!
+  if (!p || p.current >= p.total) {
+    el.classList.add('hidden')
+    return
+  }
+  el.classList.remove('hidden')
+  el.textContent = `Processing ${p.current}/${p.total}...`
 }
 
 function setupClearButton() {

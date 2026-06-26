@@ -1,5 +1,5 @@
 import { createStore } from 'https://esm.sh/zustand@5/vanilla'
-import type { AppState, AppActions, Pin, NoGpsImage } from './lib.ts'
+import type { AppState, AppActions, Pin, NoGpsImage, ProcessingState } from './lib.ts'
 
 export type AppStore = AppState & AppActions
 
@@ -7,6 +7,7 @@ export const store = createStore<AppStore>((set) => ({
   pins: [],
   noGpsImages: [],
   selectedNoGpsId: null,
+  processing: null,
   stats: { pinCount: 0, noGpsCount: 0 },
 
   addPins: (newPins: Pin[]) =>
@@ -50,11 +51,14 @@ export const store = createStore<AppStore>((set) => ({
 
   setSelectedNoGpsId: (id: string | null) => set({ selectedNoGpsId: id }),
 
+  setProcessing: (p: ProcessingState | null) => set({ processing: p }),
+
   clearAll: () =>
     set({
       pins: [],
       noGpsImages: [],
       selectedNoGpsId: null,
+      processing: null,
       stats: { pinCount: 0, noGpsCount: 0 },
     }),
 }))
