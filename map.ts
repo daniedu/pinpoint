@@ -11,16 +11,29 @@ const fullUrls = new Map<string, string>()
 export function initMap(containerId: string) {
   map = L.map(containerId).setView([20, 0], 2)
 
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenStreetMap contributors',
     maxZoom: 19,
-  }).addTo(map)
+  })
+
+  const satellite = L.tileLayer(
+    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    {
+      attribution: '&copy; Esri',
+      maxZoom: 19,
+    }
+  )
+
+  osm.addTo(map)
+
+  L.control.layers({ Street: osm, Satellite: satellite }).addTo(map)
 
   map.on('click', handleMapClick)
 
   subscribeSelector((s) => s.pins, syncMarkers)
   subscribeSelector((s) => s.selectedNoGpsId, onSelectedNoGpsChange)
 
+  initLightbox()
   return map
 }
 
@@ -39,22 +52,42 @@ function syncMarkers(pins: Pin[]) {
   }
 
   for (const pin of pins) {
-    if (!markers.has(pin.id)) {
-      const marker = L.marker([pin.lat, pin.lng]).addTo(map)
-      const thumbUrl = URL.createObjectURL(pin.thumbnailBlob)
-      const fullUrl = URL.createObjectURL(pin.optimizedBlob)
-      thumbUrls.set(pin.id, thumbUrl)
-      fullUrls.set(pin.id, fullUrl)
-      marker.bindPopup(`
+    let marker = markers.get(pin.id)
+    if (marker) {
+      marker.setLatLng([pin.lat, pin.lng])
+      continue
+    }
+
+    marker = L.marker([pin.lat, pin.lng], { draggable: true }).addTo(map)
+    const thumbUrl = URL.createObjectURL(pin.thumbnailBlob)
+    const fullUrl = URL.createObjectURL(pin.optimizedBlob)
+    thumbUrls.set(pin.id, thumbUrl)
+    fullUrls.set(pin.id, fullUrl)
+
+    function buildPopupContent(lat: number, lng: number) {
+      return `
         <div style="min-width:220px">
-          <img src="${thumbUrl}" style="width:100%;border-radius:4px;cursor:pointer" onclick="window.open('${fullUrl}')" />
+          <img src="${thumbUrl}" style="width:100%;border-radius:4px;cursor:pointer" onclick="__openLightbox('${pin.id}')" />
           <p style="margin:4px 0 0;font-size:12px;color:#666">${pin.fileName}</p>
-          <p style="margin:0;font-size:11px;color:#999">${pin.lat.toFixed(4)}, ${pin.lng.toFixed(4)}</p>
+          <p style="margin:0;font-size:11px;color:#999">${lat.toFixed(4)}, ${lng.toFixed(4)}</p>
           <button onclick="__deletePin('${pin.id}')" style="margin-top:4px;padding:2px 8px;font-size:11px;border:1px solid #ccc;border-radius:4px;background:#fff;cursor:pointer">Delete</button>
         </div>
-      `)
-      markers.set(pin.id, marker)
+      `
     }
+
+    marker.bindPopup(buildPopupContent(pin.lat, pin.lng))
+
+    marker.on('dragend', () => {
+      const pos = marker.getLatLng()
+      store.getState().updatePinPosition(pin.id, pos.lat, pos.lng)
+      marker.setPopupContent(buildPopupContent(pos.lat, pos.lng))
+    })
+
+    marker.on('click', () => {
+      store.getState().setSelectedPinId(pin.id)
+    })
+
+    markers.set(pin.id, marker)
   }
 
   if (pins.length === 1 && markers.size === 1) {
@@ -67,6 +100,41 @@ function syncMarkers(pins: Pin[]) {
 
 ;(window as any).__deletePin = (id: string) => {
   store.getState().removePin(id)
+}
+
+;(window as any).__openLightbox = (id: string) => {
+  const url = fullUrls.get(id)
+  if (!url) return
+  const img = document.getElementById('lightbox-img')! as HTMLImageElement
+  const box = document.getElementById('lightbox')!
+  img.src = url
+  box.classList.remove('hidden')
+  box.classList.add('flex')
+}
+
+function initLightbox() {
+  const box = document.getElementById('lightbox')!
+  document.getElementById('lightbox-close')!.addEventListener('click', closeLightbox)
+  box.addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeLightbox()
+  })
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeLightbox()
+  })
+}
+
+function closeLightbox() {
+  const box = document.getElementById('lightbox')!
+  box.classList.add('hidden')
+  box.classList.remove('flex')
+}
+
+export function centerOnPin(id: string) {
+  const marker = markers.get(id)
+  if (marker) {
+    map.setView(marker.getLatLng(), 13)
+    marker.openPopup()
+  }
 }
 
 function onSelectedNoGpsChange(id: string | null) {

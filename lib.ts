@@ -23,6 +23,8 @@ export interface AppState {
   pins: Pin[]
   noGpsImages: NoGpsImage[]
   selectedNoGpsId: string | null
+  selectedPinId: string | null
+  searchQuery: string
   processing: ProcessingState | null
   stats: { pinCount: number; noGpsCount: number }
   errors: AppError[]
@@ -38,6 +40,9 @@ export interface AppActions {
   setSelectedNoGpsId: (id: string | null) => void
   setProcessing: (p: ProcessingState | null) => void
   clearAll: () => void
+  updatePinPosition: (id: string, lat: number, lng: number) => void
+  setSelectedPinId: (id: string | null) => void
+  setSearchQuery: (query: string) => void
   addError: (message: string) => void
   dismissError: (id: string) => void
 }

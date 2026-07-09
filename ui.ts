@@ -1,5 +1,6 @@
 import { store, subscribeSelector } from './store.ts'
 import { processImage, extractGps } from './images.ts'
+import { centerOnPin } from './map.ts'
 import type { Pin, NoGpsImage } from './lib.ts'
 
 const CONCURRENCY = 5
@@ -8,12 +9,39 @@ export function initUI() {
   setupDropzone()
   setupClearButton()
   setupExportButton()
-  subscribeSelector((s) => s.pins, renderPinList)
+  setupSearch()
+  setupDetailButtons()
+  subscribeSelector((s) => ({ pins: s.pins, query: s.searchQuery }), renderPinList)
+  subscribeSelector((s) => s.selectedPinId, renderPinDetail)
   subscribeSelector((s) => s.noGpsImages, renderNoGpsList)
   subscribeSelector((s) => s.stats, renderStats)
   subscribeSelector((s) => s.processing, renderProcessing)
   subscribeSelector((s) => s.errors, renderErrors)
   document.getElementById('loading')?.classList.add('hidden')
+}
+
+function setupSearch() {
+  const input = document.getElementById('search-input')! as HTMLInputElement
+  let timer: number | undefined
+  input.addEventListener('input', () => {
+    clearTimeout(timer)
+    timer = window.setTimeout(() => {
+      store.getState().setSearchQuery(input.value)
+    }, 150)
+  })
+}
+
+function setupDetailButtons() {
+  document.getElementById('detail-center')!.addEventListener('click', () => {
+    const id = store.getState().selectedPinId
+    if (id) centerOnPin(id)
+  })
+  document.getElementById('detail-delete')!.addEventListener('click', () => {
+    const id = store.getState().selectedPinId
+    if (!id) return
+    store.getState().removePin(id)
+    store.getState().setSelectedPinId(null)
+  })
 }
 
 function setupDropzone() {
@@ -78,16 +106,23 @@ async function handleFiles(files: File[]) {
   store.getState().setProcessing(null)
 }
 
-function renderPinList(pins: Pin[]) {
+function renderPinList({ pins, query }: { pins: Pin[]; query: string }) {
   const container = document.getElementById('pin-list')!
-  if (pins.length === 0) {
-    container.innerHTML = ''
+  const filtered = query
+    ? pins.filter((p) => p.fileName.toLowerCase().includes(query.toLowerCase()))
+    : pins
+  if (filtered.length === 0) {
+    container.innerHTML =
+      '<p class="text-sm text-gray-400 italic">No pins</p>'
     return
   }
-  container.innerHTML = pins
+  const selectedId = store.getState().selectedPinId
+  container.innerHTML = filtered
     .map(
       (pin) => `
-      <div class="flex items-center gap-2 px-4 py-1.5 text-sm hover:bg-gray-50">
+      <div class="flex items-center gap-2 px-4 py-1.5 text-sm hover:bg-gray-50 cursor-pointer ${
+        pin.id === selectedId ? 'bg-blue-50 ring-1 ring-blue-400' : ''
+      }" data-id="${pin.id}">
         <span class="truncate flex-1">${pin.fileName}</span>
         <button class="text-red-500 hover:text-red-700 text-xs font-medium delete-pin" data-id="${pin.id}">Delete</button>
       </div>
@@ -96,11 +131,43 @@ function renderPinList(pins: Pin[]) {
     .join('')
 
   container.querySelectorAll('.delete-pin').forEach((btn) => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation()
       const id = (btn as HTMLElement).dataset.id!
       store.getState().removePin(id)
     })
   })
+
+  container.querySelectorAll('[data-id]').forEach((el) => {
+    el.addEventListener('click', (e) => {
+      const target = e.target as HTMLElement
+      if (target.closest('.delete-pin')) return
+      const id = (el as HTMLElement).dataset.id!
+      store.getState().setSelectedPinId(
+        store.getState().selectedPinId === id ? null : id
+      )
+      centerOnPin(id)
+    })
+  })
+}
+
+function renderPinDetail(id: string | null) {
+  const detail = document.getElementById('pin-detail')!
+  if (!id) {
+    detail.classList.add('hidden')
+    return
+  }
+  const pin = store.getState().pins.find((p) => p.id === id)
+  if (!pin) {
+    detail.classList.add('hidden')
+    return
+  }
+  detail.classList.remove('hidden')
+  ;(document.getElementById('detail-thumb')! as HTMLImageElement).src =
+    URL.createObjectURL(pin.thumbnailBlob)
+  document.getElementById('detail-name')!.textContent = pin.fileName
+  document.getElementById('detail-coords')!.textContent =
+    `${pin.lat.toFixed(6)}, ${pin.lng.toFixed(6)}`
 }
 
 function renderNoGpsList(images: NoGpsImage[]) {

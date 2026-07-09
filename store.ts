@@ -9,6 +9,8 @@ export const store = createStore<AppStore>((set, get) => ({
   pins: [],
   noGpsImages: [],
   selectedNoGpsId: null,
+  selectedPinId: null,
+  searchQuery: '',
   processing: null,
   stats: { pinCount: 0, noGpsCount: 0 },
   errors: [],
@@ -61,10 +63,23 @@ export const store = createStore<AppStore>((set, get) => ({
       pins: [],
       noGpsImages: [],
       selectedNoGpsId: null,
+      selectedPinId: null,
+      searchQuery: '',
       processing: null,
       stats: { pinCount: 0, noGpsCount: 0 },
       errors: [],
     }),
+
+  updatePinPosition: (id: string, lat: number, lng: number) =>
+    set((state) => ({
+      pins: state.pins.map((p) =>
+        p.id === id ? { ...p, lat, lng } : p
+      ),
+    })),
+
+  setSelectedPinId: (id: string | null) => set({ selectedPinId: id }),
+
+  setSearchQuery: (query: string) => set({ searchQuery: query }),
 
   addError: (message: string) => {
     const id = `err-${++errorId}`
