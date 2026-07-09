@@ -15,3 +15,12 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: .
+      - name: Create Release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: v${{ github.run_number }}
+          name: v${{ github.run_number }}
+          body: |
+            Deploy #${{ github.run_number }} — ${{ github.event.head_commit.message }}
+          makeLatest: true
+          generateReleaseNotes: false
