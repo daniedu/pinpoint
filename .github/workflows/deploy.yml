@@ -15,6 +15,7 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: .
+      - run: tar czf pinpoint-deploy.tar.gz index.html app.js
       - name: Create Release
         uses: ncipollo/release-action@v1
         with:
@@ -22,5 +23,7 @@ jobs:
           name: v${{ github.run_number }}
           body: |
             Deploy #${{ github.run_number }} — ${{ github.event.head_commit.message }}
+
+            The built page is attached as `pinpoint-deploy.tar.gz`. Extract and serve with any static server.
           makeLatest: true
-          generateReleaseNotes: false
+          artifacts: pinpoint-deploy.tar.gz
