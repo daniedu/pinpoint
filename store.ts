@@ -1,14 +1,17 @@
 import { createStore } from 'https://esm.sh/zustand@5/vanilla'
-import type { AppState, AppActions, Pin, NoGpsImage, ProcessingState } from './lib.ts'
+import type { AppState, AppActions, Pin, NoGpsImage, ProcessingState, AppError } from './lib.ts'
 
 export type AppStore = AppState & AppActions
 
-export const store = createStore<AppStore>((set) => ({
+let errorId = 0
+
+export const store = createStore<AppStore>((set, get) => ({
   pins: [],
   noGpsImages: [],
   selectedNoGpsId: null,
   processing: null,
   stats: { pinCount: 0, noGpsCount: 0 },
+  errors: [],
 
   addPins: (newPins: Pin[]) =>
     set((state) => {
@@ -60,7 +63,21 @@ export const store = createStore<AppStore>((set) => ({
       selectedNoGpsId: null,
       processing: null,
       stats: { pinCount: 0, noGpsCount: 0 },
+      errors: [],
     }),
+
+  addError: (message: string) => {
+    const id = `err-${++errorId}`
+    set((state) => ({ errors: [...state.errors, { message, id }] }))
+    setTimeout(() => {
+      if (get().errors.some((e) => e.id === id)) {
+        set((state) => ({ errors: state.errors.filter((e) => e.id !== id) }))
+      }
+    }, 5000)
+  },
+
+  dismissError: (id: string) =>
+    set((state) => ({ errors: state.errors.filter((e) => e.id !== id) })),
 }))
 
 export function subscribeSelector<T>(

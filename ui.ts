@@ -12,6 +12,8 @@ export function initUI() {
   subscribeSelector((s) => s.noGpsImages, renderNoGpsList)
   subscribeSelector((s) => s.stats, renderStats)
   subscribeSelector((s) => s.processing, renderProcessing)
+  subscribeSelector((s) => s.errors, renderErrors)
+  document.getElementById('loading')?.classList.add('hidden')
 }
 
 function setupDropzone() {
@@ -62,7 +64,8 @@ async function handleFiles(files: File[]) {
         if (result.pin) store.getState().addPins([result.pin])
         if (result.noGps) store.getState().addNoGpsImages([result.noGps])
       } catch (err) {
-        console.warn('Failed to process', file.name, err)
+        const msg = err instanceof Error ? err.message : String(err)
+        store.getState().addError(`Failed to process ${file.name}: ${msg}`)
       }
       completed++
       store.getState().setProcessing({ current: completed, total })
@@ -137,6 +140,29 @@ function renderNoGpsList(images: NoGpsImage[]) {
 function renderStats(stats: { pinCount: number; noGpsCount: number }) {
   const el = document.getElementById('stats')!
   el.textContent = `${stats.pinCount} pin${stats.pinCount !== 1 ? 's' : ''} · ${stats.noGpsCount} without GPS`
+}
+
+function renderErrors(errors: { id: string; message: string }[]) {
+  const container = document.getElementById('errors')!
+  if (errors.length === 0) {
+    container.innerHTML = ''
+    return
+  }
+  container.innerHTML = errors
+    .map(
+      (e) => `
+      <div class="flex items-center gap-2 px-4 py-2 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+        <span class="flex-1">${e.message}</span>
+        <button class="text-red-500 hover:text-red-700 dismiss-error" data-id="${e.id}">&times;</button>
+      </div>
+    `
+    )
+    .join('')
+  container.querySelectorAll('.dismiss-error').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      store.getState().dismissError((btn as HTMLElement).dataset.id!)
+    })
+  })
 }
 
 function renderProcessing(p: { current: number; total: number } | null) {
