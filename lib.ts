@@ -11,6 +11,7 @@ export interface NoGpsImage {
   id: string
   fileName: string
   optimizedBlob: Blob
+  thumbnailBlob: Blob
 }
 
 export interface ProcessingState {
@@ -24,6 +25,7 @@ export interface AppState {
   selectedNoGpsId: string | null
   processing: ProcessingState | null
   stats: { pinCount: number; noGpsCount: number }
+  errors: AppError[]
 }
 
 export interface AppActions {
@@ -36,6 +38,13 @@ export interface AppActions {
   setSelectedNoGpsId: (id: string | null) => void
   setProcessing: (p: ProcessingState | null) => void
   clearAll: () => void
+  addError: (message: string) => void
+  dismissError: (id: string) => void
+}
+
+export interface AppError {
+  message: string
+  id: string
 }
 
 export const MAX_IMAGE_DIMENSION = 1200

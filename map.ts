@@ -57,7 +57,9 @@ function syncMarkers(pins: Pin[]) {
     }
   }
 
-  if (pins.length > 0) {
+  if (pins.length === 1 && markers.size === 1) {
+    map.setView([pins[0].lat, pins[0].lng], 13)
+  } else if (pins.length > 1) {
     const group = L.featureGroup(Array.from(markers.values()))
     map.fitBounds(group.getBounds().pad(0.1))
   }
@@ -85,7 +87,7 @@ async function handleMapClick(e: any) {
     lat,
     lng,
     optimizedBlob: image.optimizedBlob,
-    thumbnailBlob: image.optimizedBlob,
+    thumbnailBlob: image.thumbnailBlob,
     fileName: image.fileName,
   }
 

@@ -3,12 +3,14 @@ import { get, set } from "https://esm.sh/idb-keyval@6";
 
 // store.ts
 import { createStore } from "https://esm.sh/zustand@5/vanilla";
-var store = createStore((set) => ({
+var errorId = 0;
+var store = createStore((set, get) => ({
   pins: [],
   noGpsImages: [],
   selectedNoGpsId: null,
   processing: null,
   stats: { pinCount: 0, noGpsCount: 0 },
+  errors: [],
   addPins: (newPins) => set((state) => {
     const pins = [...state.pins, ...newPins];
     return { pins, stats: { ...state.stats, pinCount: pins.length } };
@@ -43,8 +45,19 @@ var store = createStore((set) => ({
     noGpsImages: [],
     selectedNoGpsId: null,
     processing: null,
-    stats: { pinCount: 0, noGpsCount: 0 }
-  })
+    stats: { pinCount: 0, noGpsCount: 0 },
+    errors: []
+  }),
+  addError: (message) => {
+    const id = `err-${++errorId}`;
+    set((state) => ({ errors: [...state.errors, { message, id }] }));
+    setTimeout(() => {
+      if (get().errors.some((e) => e.id === id)) {
+        set((state) => ({ errors: state.errors.filter((e) => e.id !== id) }));
+      }
+    }, 5000);
+  },
+  dismissError: (id) => set((state) => ({ errors: state.errors.filter((e) => e.id !== id) }))
 }));
 function subscribeSelector(selector, callback) {
   let prev = selector(store.getState());
@@ -129,7 +142,9 @@ function syncMarkers(pins) {
       markers.set(pin.id, marker);
     }
   }
-  if (pins.length > 0) {
+  if (pins.length === 1 && markers.size === 1) {
+    map.setView([pins[0].lat, pins[0].lng], 13);
+  } else if (pins.length > 1) {
     const group = L.featureGroup(Array.from(markers.values()));
     map.fitBounds(group.getBounds().pad(0.1));
   }
@@ -154,7 +169,7 @@ async function handleMapClick(e) {
     lat,
     lng,
     optimizedBlob: image.optimizedBlob,
-    thumbnailBlob: image.optimizedBlob,
+    thumbnailBlob: image.thumbnailBlob,
     fileName: image.fileName
   };
   store.getState().addPins([pin]);
@@ -220,7 +235,8 @@ async function processImage(file, gps2) {
     noGps: {
       id,
       fileName: file.name,
-      optimizedBlob
+      optimizedBlob,
+      thumbnailBlob
     }
   };
 }
@@ -230,7 +246,9 @@ async function extractGps(file) {
     if (result && typeof result.latitude === "number" && typeof result.longitude === "number") {
       return { latitude: result.latitude, longitude: result.longitude };
     }
-  } catch {}
+  } catch (err) {
+    console.warn("GPS extraction failed:", err);
+  }
   return null;
 }
 
@@ -244,6 +262,8 @@ function initUI() {
   subscribeSelector((s) => s.noGpsImages, renderNoGpsList);
   subscribeSelector((s) => s.stats, renderStats);
   subscribeSelector((s) => s.processing, renderProcessing);
+  subscribeSelector((s) => s.errors, renderErrors);
+  document.getElementById("loading")?.classList.add("hidden");
 }
 function setupDropzone() {
   const dropzone = document.getElementById("dropzone");
@@ -285,7 +305,8 @@ async function handleFiles(files) {
         if (result.noGps)
           store.getState().addNoGpsImages([result.noGps]);
       } catch (err) {
-        console.warn("Failed to process", file.name, err);
+        const msg = err instanceof Error ? err.message : String(err);
+        store.getState().addError(`Failed to process ${file.name}: ${msg}`);
       }
       completed++;
       store.getState().setProcessing({ current: completed, total });
@@ -341,6 +362,24 @@ function renderNoGpsList(images) {
 function renderStats(stats) {
   const el = document.getElementById("stats");
   el.textContent = `${stats.pinCount} pin${stats.pinCount !== 1 ? "s" : ""} · ${stats.noGpsCount} without GPS`;
+}
+function renderErrors(errors) {
+  const container = document.getElementById("errors");
+  if (errors.length === 0) {
+    container.innerHTML = "";
+    return;
+  }
+  container.innerHTML = errors.map((e) => `
+      <div class="flex items-center gap-2 px-4 py-2 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+        <span class="flex-1">${e.message}</span>
+        <button class="text-red-500 hover:text-red-700 dismiss-error" data-id="${e.id}">&times;</button>
+      </div>
+    `).join("");
+  container.querySelectorAll(".dismiss-error").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      store.getState().dismissError(btn.dataset.id);
+    });
+  });
 }
 function renderProcessing(p) {
   const el = document.getElementById("processing");

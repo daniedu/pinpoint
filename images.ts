@@ -64,6 +64,7 @@ export async function processImage(
       id,
       fileName: file.name,
       optimizedBlob,
+      thumbnailBlob,
     },
   }
 }
@@ -80,6 +81,8 @@ export async function extractGps(
     ) {
       return { latitude: result.latitude, longitude: result.longitude }
     }
-  } catch {}
+  } catch (err) {
+    console.warn('GPS extraction failed:', err)
+  }
   return null
 }
